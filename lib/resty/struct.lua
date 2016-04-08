@@ -1,26 +1,58 @@
 --[[
- * Copyright (c) 2015-2016 Iryont <https://github.com/iryont/lua-struct>
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
+  * Copyright (c) 2015-2016 Iryont <https://github.com/iryont/lua-struct>
+  *
+  * Permission is hereby granted, free of charge, to any person obtaining a copy
+  * of this software and associated documentation files (the "Software"), to deal
+  * in the Software without restriction, including without limitation the rights
+  * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  * copies of the Software, and to permit persons to whom the Software is
+  * furnished to do so, subject to the following conditions:
+  *
+  * The above copyright notice and this permission notice shall be included in
+  * all copies or substantial portions of the Software.
+  *
+  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+  * THE SOFTWARE.
 ]]
 
 struct = {}
+
+local function pack_int(val, numbytes, endianness)
+  local bytes = {}
+  for j = 1, numbytes do
+    table.insert(bytes, string.char(val % (2 ^ 8)))
+    val = math.floor(val / (2 ^ 8))
+  end
+
+  if not endianness then
+    return string.reverse(table.concat(bytes))
+  else
+    return table.concat(bytes)
+  end
+end
+
+local function unpack_int(stream, start_idx, numbytes, endianness)
+  local val = 0
+  for j = 1, numbytes do
+    local byte = string.byte(stream:sub(start_idx, start_idx))
+    if endianness then
+      val = val + byte * (2 ^ ((j - 1) * 8))
+    else
+      val = val + byte * (2 ^ ((n - j) * 8))
+    end
+    start_idx = start_idx + 1
+  end
+
+  if signed and val >= 2 ^ (n * 8 - 1) then
+    val = val - 2 ^ (n * 8)
+  end
+  return val
+end
 
 function struct.pack(format, ...)
   local stream = {}
@@ -92,6 +124,14 @@ function struct.pack(format, ...)
     elseif opt == 's' then
       table.insert(stream, tostring(table.remove(vars, 1)))
       table.insert(stream, string.char(0))
+    elseif opt == 'S' then
+      -- same as `s` except:
+      -- 1. it will packed length first.
+      -- 2. don't append a zero byte to the end.
+      local s_arg = tostring(table.remove(vars, 1))
+      local len_bytes = pack_int(s_arg:len(), 4, endianness)
+      table.insert(stream, len_bytes)
+      table.insert(stream, s_arg)
     elseif opt == 'c' then
       local n = format:sub(i + 1):match('%d+')
       local length = tonumber(n)
@@ -179,6 +219,11 @@ function struct.unpack(format, stream)
       local str = table.concat(bytes)
       iterator = iterator + str:len() + 1
       table.insert(vars, str)
+    elseif opt == 'S' then
+      local n = unpack_int(stream, iterator, 4, endianness)
+      iterator = iterator + 4
+      table.insert(vars, stream:sub(iterator, iterator + tonumber(n)))
+      iterator = iterator + tonumber(n)
     elseif opt == 'c' then
       local n = format:sub(i + 1):match('%d+')
       table.insert(vars, stream:sub(iterator, iterator + tonumber(n)))
