@@ -54,8 +54,9 @@ local function unpack_int(stream, start_idx, numbytes, endianness)
   return val
 end
 
-function struct.pack(format, ...)
-  local stream = {}
+-- return a table.
+function struct.pack_raw(format, stream, ...)
+  -- local stream = {}
   local vars = {...}
   local endianness = true
 
@@ -64,6 +65,13 @@ function struct.pack(format, ...)
 
     if opt == '>' then
       endianness = false
+    elseif opt == '?' then
+      local val = table.remove(vars, 1)
+      local byte = string.char(0)
+      if val == true then
+        byte = string.char(1)
+      end
+      table.insert(stream, byte)
     elseif opt:find('[bBhHiIlL]') then
       local n = opt:find('[hH]') and 2 or opt:find('[iI]') and 4 or opt:find('[lL]') and 8 or 1
       local val = tonumber(table.remove(vars, 1))
@@ -146,13 +154,20 @@ function struct.pack(format, ...)
       i = i + n:len()
     end
   end
+  return stream
+end
 
+function struct.pack(formt, ...)
+  local stream = {}
+  vars = {...}
+  struct.pack_raw(formt, stream, unpack(vars))
   return table.concat(stream)
 end
 
-function struct.unpack(format, stream)
+function struct.unpack(format, stream, start_idx)
+  start_idx = start_idx or 1
   local vars = {}
-  local iterator = 1
+  local iterator = start_idx
   local endianness = true
 
   for i = 1, format:len() do
@@ -160,6 +175,16 @@ function struct.unpack(format, stream)
 
     if opt == '>' then
       endianness = false
+    elseif opt == '?' then
+      local byte = string.byte(stream:sub(iterator, iterator))
+      if byte == 1 then
+        table.insert(vars, true)
+      elseif byte == 0 then
+        table.insert(vars, false)
+      else
+        return vars, string.format("get wrong value %d fot bool", byte)
+      end
+      iterator = iterator + 1
     elseif opt:find('[bBhHiIlL]') then
       local n = opt:find('[hH]') and 2 or opt:find('[iI]') and 4 or opt:find('[lL]') and 8 or 1
       local signed = opt:lower() == opt
@@ -222,6 +247,9 @@ function struct.unpack(format, stream)
     elseif opt == 'S' then
       local n = unpack_int(stream, iterator, 4, endianness)
       iterator = iterator + 4
+      if n < 0 then
+        return vars, string.format("wrong length for string %d", n)
+      end
       table.insert(vars, stream:sub(iterator, iterator + tonumber(n)))
       iterator = iterator + tonumber(n)
     elseif opt == 'c' then
@@ -232,7 +260,15 @@ function struct.unpack(format, stream)
     end
   end
 
-  return unpack(vars)
+  start_idx = iterator
+  return vars, start_idx, nil
+  -- return unpack(vars)
+end
+
+
+function struct.unpack_to_end(format, stream, start_idx)
+  local vars, _, err = struct.unpack(format, stream, start_idx)
+  return vars, err
 end
 
 return struct
