@@ -1,5 +1,5 @@
-local bit = "require bit"
-local struct = "require struct"
+local bit = require "bit"
+local struct = require "struct"
 
 local setmetatable = setmetatable
 
@@ -34,6 +34,96 @@ local ZOO_REMOVE_WATCHES  = 17
 local ZOO_CLOSE_OP        = -11
 local ZOO_SETAUTH_OP      = 100
 local ZOO_SETWATCHES_OP   = 101
+
+
+local _PathWatchPacket = {
+  path = ""
+  watch = false  -- boolean
+
+  new = function(self, o)
+    o = o or {}
+    -- create object if user does not provide one
+    setmetatable(o, self)
+    self.__index = self
+    return o
+  end
+
+  dump = function(self)
+    return struct.pack(">S?", self.path, self.watch)
+  end
+
+  dump_raw = function(self, stream)
+    return struct.pack_raw('>S?', stream, self.path, self.watch)
+  end
+
+  load = function(self, stream, start_idx)
+    start_idx = start_idx or 0
+    local vars, start_idx, err = struct.unpack('>S?', stream, start_idx)
+    if err == nil then
+      self.path, self.watch = unpack(vars)
+    end
+    return start_idx, err
+  end
+}
+
+local _PathVersionPacket = {
+  path = ""
+  version = 0  -- int
+
+  new = function(self, o)
+    o = o or {}
+    -- create object if user does not provide one
+    setmetatable(o, self)
+    self.__index = self
+    return o
+  end
+
+  dump = function(self)
+    return struct.pack(">Si", self.path, self.version)
+  end
+
+  dump_raw = function(self, stream)
+    return struct.pack_raw('>Si', stream, self.path, self.version)
+  end
+
+  load = function(self, stream, start_idx)
+    start_idx = start_idx or 0
+    local vars, start_idx, err = struct.unpack('>Si', stream, start_idx)
+    if err == nil then
+      self.path, self.version = unpack(vars)
+    end
+    return start_idx, err
+  end
+}
+
+local _PathPacket = {
+  path = ""
+
+  new = function(self, o)
+    o = o or {}
+    -- create object if user does not provide one
+    setmetatable(o, self)
+    self.__index = self
+    return o
+  end
+
+  dump = function(self)
+    return struct.pack(">S", self.path)
+  end
+
+  dump_raw = function(self, stream)
+    return struct.pack_raw('>S', stream, self.path)
+  end
+
+  load = function(self, stream, start_idx)
+    start_idx = start_idx or 0
+    local vars, start_idx, err = struct.unpack('>S', stream, start_idx)
+    if err == nil then
+      self.path = unpack(vars)
+    end
+    return start_idx, err
+  end
+}
 
 -- private function
 -- local function _hello()
@@ -128,6 +218,13 @@ Stat = {
                        self.pzxid)
   end
 
+  dump_raw = function(self, stream)
+    return struct.pack_raw('>lllliiiliil', stream, self.czxid, self.mzxid,
+                           self.ctime, self.mtime, self.version, self.cversion,
+                           self.aversion, self.ephemeralOwner, self.dataLength,
+                           self.numChildren, self.pzxid)
+  end
+
   load = function(self, stream, start_idx)
     local vars, start_idx, err = struct.unpack('>lllliiiliil', stream, start_idx)
     if err == nil then
@@ -142,7 +239,7 @@ ConnectReq = {
   last_zxid_seen = 0   -- long
   timeout = 0          -- int
   session_id = 0       -- long
-  passwd = ""          -- string
+  passwd = ""          -- buffer
   new = function(self, o)
     o = o or {}
     -- create object if user does not provide one
@@ -153,6 +250,11 @@ ConnectReq = {
 
   dump = function(self)
     return struct.pack(">ililS", self.proto_ver, self.last_zxid_seen,
+                       self.timeout, self.session_id, self.passwd)
+  end
+
+  dump_raw = function(self, stream)
+    return struct.pack_raw(">ililS", stream, self.proto_ver, self.last_zxid_seen,
                        self.timeout, self.session_id, self.passwd)
   end
 
@@ -217,7 +319,7 @@ MultiHeader = {
 AuthPacket = {
   ty = 0      -- int
   scheme = ""
-  auth = ""
+  auth = ""   -- buffer
 
   new = function(self, o)
     o = o or {}
@@ -266,35 +368,11 @@ ReplyHeader = {
   end
 }
 
-GetDataReq = {
-  path = ""
-  watch = false  -- boolean
-
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    return struct.pack(">S?", self.path, self.version)
-  end
-
-  load = function(self, stream, start_idx)
-    start_idx = start_idx or 0
-    local vars, start_idx, err = struct.unpack('>S?', stream, start_idx)
-    if err == nil then
-      self.path, self.version = unpack(vars)
-    end
-    return start_idx, err
-  end
-}
+GetDataReq = _PathWatchPacket
 
 SetDataReq = {
   path = ""
-  data = ""
+  data = ""    -- buffer
   version = 0  -- int
 
   new = function(self, o)
@@ -349,8 +427,8 @@ ReconfigReq = {
 
 CreateReq = {
   path = ""
-  data = ""
-  acl = nil
+  data = ""    -- buffer
+  acls = {}    -- list of ACL
   flags = 0    -- int
 
   new = function(self, o)
@@ -362,52 +440,65 @@ CreateReq = {
   end
 
   dump = function(self)
-    return struct.pack(">ililS", self.proto_ver, self.last_zxid_seen,
-                       self.timeout, self.session_id, self.passwd)
+    local stream = {}
+    self:dump_raw(stream)
+    return table.concat(stream)
+  end
+
+  dump_raw = function(self, stream)
+    struct.pack_raw(">SSi", stream, self.path, self.data, #self.acls)
+    for _, acl in pairs(self.acls) do
+      acl:dump_raw(stream)
+    end
+    struct.pack_raw(">i", stream, self.flags)
+    return stream
   end
 
   load = function(self, stream, start_idx)
     start_idx = start_idx or 0
-    local vars, start_idx, err = struct.unpack('>ililS', stream, start_idx)
+    local vars, start_idx, err = struct.unpack('>SSi', stream, start_idx)
+    local num_acls = 0
+    local acls = {}
+
+    if err != nil then
+      return start_idx, err
+    end
+
+    self.path, self.data, num_acls = unpack(vars)
+    for i = 1, num_acls do
+      local acl = ACL:new()
+      start_idx, err = acl.load(stream, start_idx)
+      if err != nil then
+        return start_idx, err
+      end
+      table.insert(acls, acl)
+    end
+    self.acls = acls
+    vars, start_idx, err = struct.unpack('>i', stream, start_idx)
     if err == nil then
-      self.proto_ver, self.last_zxid_seen, self.timeout, self.session_id, self.passwd = unpack(vars)
+      self.flags = unpack(vars)
     end
     return start_idx, err
   end
 }
 
-DeleteReq = {
+DeleteReq = _PathVersionPacket
+
+GetChildrenReq = _PathWatchPacket
+GetChildren2Req = _PathWatchPacket
+
+CheckVersionReq = _PathVersionPacket
+GetMaxChildrenReq = _PathPacket
+
+SyncReq = _PathPacket
+SyncResp = _PathPacket
+
+GetACL = _PathPacket
+
+-- TODO
+SetACL = {
   path = ""
-  version = 1   -- int
-
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    return struct.pack(">Si", self.path, self.version)
-  end
-
-  load = function(self, stream, start_idx)
-    start_idx = start_idx or 0
-    local vars, start_idx, err = struct.unpack('>Si', stream, start_idx)
-    if err == nil then
-      self.path, self.version = unpack(vars)
-    end
-    return start_idx, err
-  end
-}
-
-ExistsReq = GetDataReq
-GetChildrenReq = GetDataReq
-GetChildren2Req = GetChildrenReq
-
-CheckVersionReq = {
-  path = ""
+  acls = {}   -- list of ACL object
   version = 0 -- int
 
   new = function(self, o)
@@ -419,92 +510,43 @@ CheckVersionReq = {
   end
 
   dump = function(self)
-    return struct.pack(">Si", self.path, self.version)
+    local stream = {}
+    self:dump_raw(stream)
+    return table.concat(stream)
+  end
+
+  dump_raw = function(self, stream)
+    struct.pack_raw(">Si", stream, self.path, #self.acls)
+    for _, acl in pairs(self.acls) do
+      acl:dump_raw(stream)
+    end
+    struct.pack_raw(">i", stream, self.version)
+    return stream
   end
 
   load = function(self, stream, start_idx)
     start_idx = start_idx or 0
     local vars, start_idx, err = struct.unpack('>Si', stream, start_idx)
-    if err == nil then
-      self.path, self.version = unpack(vars)
+    local num_acls = 0
+    local acls = {}
+
+    if err != nil then
+      return start_idx, err
     end
-    return start_idx, err
-  end
-}
 
-SyncReq = {
-  path = ""
-
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    return struct.pack(">S", self.path)
-  end
-
-  load = function(self, stream, start_idx)
-    start_idx = start_idx or 0
-    local vars, start_idx, err = struct.unpack('>S', stream, start_idx)
-    if err == nil then
-      self.path = unpack(vars)
+    self.path, num_acls = unpack(vars)
+    for i = 1, num_acls do
+      local acl = ACL:new()
+      start_idx, err = acl.load(stream, start_idx)
+      if err != nil then
+        return start_idx, err
+      end
+      table.insert(acls, acl)
     end
-    return start_idx, err
-  end
-}
-
-GetACL = {
-  path = ""
-
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    return struct.pack(">S", self.path)
-  end
-
-  load = function(self, stream, start_idx)
-    start_idx = start_idx or 0
-    local vars, start_idx, err = struct.unpack('>S', stream, start_idx)
+    self.acls = acls
+    vars, start_idx, err = struct.unpack('>i', stream, start_idx)
     if err == nil then
-      self.path = unpack(vars)
-    end
-    return start_idx, err
-  end
-}
-
--- TODO
-SetACL = {
-  path = ""
-  acls = {}
-  version = 0
-
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    return struct.pack(">S", self.path)
-  end
-
-  load = function(self, stream, start_idx)
-    start_idx = start_idx or 0
-    local vars, start_idx, err = struct.unpack('>S', stream, start_idx)
-    if err == nil then
-      self.path = unpack(vars)
+      self.version = unpack(vars)
     end
     return start_idx, err
   end
@@ -536,6 +578,9 @@ WatchEvent = {
     return start_idx, err
   end
 }
+
+ExistsReq = _PathWatchPacket
+
 -- safety set, forbid to add attribute.
 local module_mt = {
   __newindex = (
