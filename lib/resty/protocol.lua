@@ -35,6 +35,29 @@ local ZOO_CLOSE_OP        = -11
 local ZOO_SETAUTH_OP      = 100
 local ZOO_SETWATCHES_OP   = 101
 
+local _TypePacket = {
+  type = 0
+
+  new = function(self, o)
+    o = o or {}
+    -- create object if user does not provide one
+    setmetatable(o, self)
+    self.__index = self
+    return o
+  end
+
+  dump = function(self)
+    return ''
+  end
+
+  dump_raw = function(self, stream)
+    return stream
+  end
+
+  load = function(self, stream, start_idx)
+    return start_idx, nil
+  end
+}
 
 local _PathWatchPacket = {
   path = ""
@@ -234,6 +257,9 @@ Stat = {
   end
 }
 
+PingReq = _TypePacket:new{type = ZOO_PING_OP}
+CloseReq = _TypePacket:new{type = ZOO_CLOSE_OP}
+
 ConnectReq = {
   proto_ver = 0        -- int
   last_zxid_seen = 0   -- long
@@ -269,7 +295,7 @@ ConnectReq = {
 
 ReqHeader = {
   xid = 0    -- int
-  ty = 0     -- int
+  type = 0     -- int
   new = function(self, o)
     o = o or {}
     -- create object if user does not provide one
@@ -279,20 +305,24 @@ ReqHeader = {
   end
 
   dump = function(self)
-    return struct.pack('>ii', self.xid, self.ty)
+    return struct.pack('>ii', self.xid, self.type)
+  end
+
+  dump_raw = function(self, stream)
+    return struct.pack_raw('>ii', stream, self.xid, self.type)
   end
 
   load = function(self, stream, start_idx)
     local vars, start_idx, err = struct.unpack('>ii', stream, start_idx)
     if err == nil then
-      self.xid, self.ty = unpack(vars)
+      self.xid, self.type = unpack(vars)
     end
     return start_idx, err
   end
 }
 
 MultiHeader = {
-  ty = 0     -- int
+  type = 0     -- int
   done = true    -- boolean
   err = 0     -- int
   new = function(self, o)
@@ -304,20 +334,24 @@ MultiHeader = {
   end
 
   dump = function(self)
-    return struct.pack('>i?i', self.ty, self.done, self.err)
+    return struct.pack('>i?i', self.type, self.done, self.err)
+  end
+
+  dump_raw = function(self, stream)
+    return struct.pack_raw('>i?i', stream, self.type, self.done, self.err)
   end
 
   load = function(self, stream, start_idx)
     local vars, start_idx, err = struct.unpack('>i?i', stream, start_idx)
     if err == nil then
-      self.ty, self.done, self.err = unpack(vars)
+      self.type, self.done, self.err = unpack(vars)
     end
     return start_idx, err
   end
 }
 
 AuthPacket = {
-  ty = 0      -- int
+  type = ZOO_SETAUTH_OP    -- int
   scheme = ""
   auth = ""   -- buffer
 
@@ -330,14 +364,18 @@ AuthPacket = {
   end
 
   dump = function(self)
-    return struct.pack(">iSS", self.ty, self.scheme, self.auth)
+    return struct.pack(">iSS", self.type, self.scheme, self.auth)
+  end
+
+  dump_raw = function(self, stream)
+    return struct.pack_raw(">iSS", stream, self.type, self.scheme, self.auth)
   end
 
   load = function(self, stream, start_idx)
     start_idx = start_idx or 0
     local vars, start_idx, err = struct.unpack('>SSi', stream, start_idx)
     if err == nil then
-      self.ty, self.scheme, self.auth = unpack(vars)
+      self.type, self.scheme, self.auth = unpack(vars)
     end
     return start_idx, err
   end
@@ -359,6 +397,10 @@ ReplyHeader = {
     return struct.pack('>ili', self.xid, self.zxid, self.err)
   end
 
+  dump_raw = function(self, stream)
+    return struct.pack_raw('>ili', stream, self.xid, self.zxid, self.err)
+  end
+
   load = function(self, stream, start_idx)
     local vars, start_idx, err = struct.unpack('>ili', stream, start_idx)
     if err == nil then
@@ -368,9 +410,10 @@ ReplyHeader = {
   end
 }
 
-GetDataReq = _PathWatchPacket
+GetDataReq = _PathWatchPacket:new{type = ZOO_GETDATA_OP}
 
 SetDataReq = {
+  type = ZOO_SETDATA_OP
   path = ""
   data = ""    -- buffer
   version = 0  -- int
@@ -387,6 +430,10 @@ SetDataReq = {
     return struct.pack(">SSi", self.path, self.data, self.version)
   end
 
+  dump_raw = function(self, stream)
+    return struct.pack_raw(">SSi", stream, self.path, self.data, self.version)
+  end
+
   load = function(self, stream, start_idx)
     start_idx = start_idx or 0
     local vars, start_idx, err = struct.unpack('>SSi', stream, start_idx)
@@ -398,6 +445,7 @@ SetDataReq = {
 }
 
 ReconfigReq = {
+  type = ZOO_RECONFIG_OP
   joining = ""
   leaving = ""
   new_members = ""
@@ -412,7 +460,13 @@ ReconfigReq = {
   end
 
   dump = function(self)
-    return struct.pack(">SSSl", self.joining, self.leaving, self.new_members, self.config_id)
+    return struct.pack(">SSSl", self.joining, self.leaving,
+                       self.new_members, self.config_id)
+  end
+
+  dump_raw = function(self, stream)
+    return struct.pack_raw(">SSSl", stream, self.joining, self.leaving,
+                           self.new_members, self.config_id)
   end
 
   load = function(self, stream, start_idx)
@@ -426,6 +480,7 @@ ReconfigReq = {
 }
 
 CreateReq = {
+  type = ZOO_CREATE_OP
   path = ""
   data = ""    -- buffer
   acls = {}    -- list of ACL
@@ -482,21 +537,22 @@ CreateReq = {
   end
 }
 
-DeleteReq = _PathVersionPacket
+DeleteReq = _PathVersionPacket:new{type = ZOO_DELETE_OP}
 
-GetChildrenReq = _PathWatchPacket
-GetChildren2Req = _PathWatchPacket
+GetChildrenReq = _PathWatchPacket:new{type = ZOO_GETCHILDREN_OP}
+GetChildren2Req = _PathWatchPacket:new{type = ZOO_GETCHILDREN2_OP}
 
-CheckVersionReq = _PathVersionPacket
+CheckVersionReq = _PathVersionPacket:new{type = ZOO_CHECK_OP}
 GetMaxChildrenReq = _PathPacket
 
-SyncReq = _PathPacket
+SyncReq = _PathPacket:new{type = ZOO_SYNC_OP}
 SyncResp = _PathPacket
 
-GetACL = _PathPacket
+GetACL = _PathPacket:new{type = ZOO_GETACL_OP}
 
 -- TODO
 SetACL = {
+  type = ZOO_SETACL_OP
   path = ""
   acls = {}   -- list of ACL object
   version = 0 -- int
@@ -553,7 +609,7 @@ SetACL = {
 }
 
 WatchEvent = {
-  ty = 0   --int
+  type = 0   --int
   state = 0 --int
   path = ""
 
@@ -566,20 +622,38 @@ WatchEvent = {
   end
 
   dump = function(self)
-    return struct.pack(">iiS", self.ty, self.state, self.path)
+    return struct.pack(">iiS", self.type, self.state, self.path)
+  end
+
+  dump_raw = function(self, stream)
+    return struct.pack_raw(">iiS", stream, self.type, self.state, self.path)
   end
 
   load = function(self, stream, start_idx)
     start_idx = start_idx or 0
     local vars, start_idx, err = struct.unpack('>S', stream, start_idx)
     if err == nil then
-      self.ty, self.state, self.path = unpack(vars)
+      self.type, self.state, self.path = unpack(vars)
     end
     return start_idx, err
   end
 }
 
-ExistsReq = _PathWatchPacket
+ExistsReq = _PathWatchPacket:new{type = ZOO_EXISTS_OP}
+
+function serialize(o, zxid)
+  local stream = {}
+  if zxid then
+    struct.pack_raw('>i', stream, zxid)
+  end
+  if o.type then
+    struct.pack_raw('>i', stream, zxid)
+  end
+  o:dump_raw(stream)
+  local bytes = table.concat(stream)
+  local lenbytes = struct.pack(bytes:len())
+  return lenbytes .. bytes
+end
 
 -- safety set, forbid to add attribute.
 local module_mt = {
