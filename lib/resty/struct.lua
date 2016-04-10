@@ -20,7 +20,26 @@
   * THE SOFTWARE.
 ]]
 
-struct = {}
+local bit = require "bit"
+local print = print
+local string = string
+local table = table
+local tostring = tostring
+local tonumber = tonumber
+local math = math
+local error = error
+local setmetatable = setmetatable
+local gunpack = unpack   -- to avoid conflict
+
+local _M = {}
+
+if setfenv then                 -- for lua5.1 and luajit
+  setfenv(1, _M)
+elseif _ENV then                -- for lua5.2 or newer
+  _ENV = _M
+else
+  error("both setfenv and _ENV are nil...")
+end
 
 local function pack_int(val, numbytes, endianness)
   local bytes = {}
@@ -43,19 +62,18 @@ local function unpack_int(stream, start_idx, numbytes, endianness)
     if endianness then
       val = val + byte * (2 ^ ((j - 1) * 8))
     else
-      val = val + byte * (2 ^ ((n - j) * 8))
+      val = val + byte * (2 ^ ((numbytes - j) * 8))
     end
     start_idx = start_idx + 1
   end
-
-  if signed and val >= 2 ^ (n * 8 - 1) then
-    val = val - 2 ^ (n * 8)
+  if signed and val >= 2 ^ (numbytes * 8 - 1) then
+    val = val - 2 ^ (numbytes * 8)
   end
   return val
 end
 
 -- return a table.
-function struct.pack_raw(format, stream, ...)
+function _M.pack_raw(format, stream, ...)
   -- local stream = {}
   local vars = {...}
   local endianness = true
@@ -157,14 +175,14 @@ function struct.pack_raw(format, stream, ...)
   return stream
 end
 
-function struct.pack(formt, ...)
+function _M.pack(formt, ...)
   local stream = {}
-  vars = {...}
-  struct.pack_raw(formt, stream, unpack(vars))
+  local vars = {...}
+  _M.pack_raw(formt, stream, gunpack(vars))
   return table.concat(stream)
 end
 
-function struct.unpack(format, stream, start_idx)
+function _M.unpack(format, stream, start_idx)
   start_idx = start_idx or 1
   local vars = {}
   local iterator = start_idx
@@ -250,7 +268,7 @@ function struct.unpack(format, stream, start_idx)
       if n < 0 then
         return vars, string.format("wrong length for string %d", n)
       end
-      table.insert(vars, stream:sub(iterator, iterator + tonumber(n)))
+      table.insert(vars, stream:sub(iterator, iterator + tonumber(n) - 1))
       iterator = iterator + tonumber(n)
     elseif opt == 'c' then
       local n = format:sub(i + 1):match('%d+')
@@ -262,13 +280,22 @@ function struct.unpack(format, stream, start_idx)
 
   start_idx = iterator
   return vars, start_idx, nil
-  -- return unpack(vars)
 end
 
 
-function struct.unpack_to_end(format, stream, start_idx)
-  local vars, _, err = struct.unpack(format, stream, start_idx)
+function _M.unpack_to_end(format, stream, start_idx)
+  local vars, _, err = _M.unpack(format, stream, start_idx)
   return vars, err
 end
 
-return struct
+-- safety set, forbid to add attribute.
+local module_mt = {
+  __newindex = (
+    function (table, key, val)
+      error('Attempt to write to undeclared variable "' .. key .. '"')
+               end),
+}
+
+setmetatable(_M, module_mt)
+
+return _M

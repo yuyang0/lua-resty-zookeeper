@@ -14,8 +14,7 @@ else
    error("both setfenv and _ENV are nil...")
 end
 
-
-Client = {
+Conn = {
   new = function(self, o)
     o = o or {}
     -- create object if user does not provide one
@@ -24,6 +23,8 @@ Client = {
     return o
   end
 
+  _read_header = function(self)
+  end
 }
 
 -- safety set, forbid to add attribute.

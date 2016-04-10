@@ -21,32 +21,32 @@ local _Base = {
     setmetatable(o, self)
     self.__index = self
     return o
-  end
+  end,
 
   dump = function(self)
     local stream = {}
     self:dump_raw(stream)
     return table.concat(stream)
-  end
+  end,
 
   -- just a place holder
   dump_raw = function(self, stream)
     return stream
-  end
+  end,
 
   -- just a place holder
   load = function(self, stream, start_idx)
     return start_idx, nil
-  end
+  end,
 }
 
 local _PathWatchPacket = _Base:new {
-  path = ""
-  watch = false  -- boolean
+  path = "",
+  watch = false,  -- boolean
 
   dump_raw = function(self, stream)
     return struct.pack_raw('>S?', stream, self.path, self.watch)
-  end
+  end,
 
   load = function(self, stream, start_idx)
     start_idx = start_idx or 0
@@ -55,16 +55,16 @@ local _PathWatchPacket = _Base:new {
       self.path, self.watch = unpack(vars)
     end
     return start_idx, err
-  end
+  end,
 }
 
 local _PathVersionPacket = _Base:new {
-  path = ""
-  version = 0  -- int
+  path = "",
+  version = 0,  -- int
 
   dump_raw = function(self, stream)
     return struct.pack_raw('>Si', stream, self.path, self.version)
-  end
+  end,
 
   load = function(self, stream, start_idx)
     start_idx = start_idx or 0
@@ -73,15 +73,15 @@ local _PathVersionPacket = _Base:new {
       self.path, self.version = unpack(vars)
     end
     return start_idx, err
-  end
+  end,
 }
 
 local _PathPacket = _Base:new {
-  path = ""
+  path = "",
 
   dump_raw = function(self, stream)
     return struct.pack_raw('>S', stream, self.path)
-  end
+  end,
 
   load = function(self, stream, start_idx)
     start_idx = start_idx or 0
@@ -90,17 +90,17 @@ local _PathPacket = _Base:new {
       self.path = unpack(vars)
     end
     return start_idx, err
-  end
+  end,
 }
 
 
 Id = _Base:new {
-  scheme = ""
-  id = ""
+  scheme = "",
+  id = "",
 
   dump_raw = function(self, stream)
     return struct.pack_raw('>SS', stream, self.scheme, self.id)
-  end
+  end,
 
   load = function(self, stream, start_idx)
     local vars, start_idx, err = struct.unpack('>SS', stream, start_idx)
@@ -108,18 +108,18 @@ Id = _Base:new {
       self.scheme, self.id = unpack(vars)
     end
     return start_idx, err
-  end
+  end,
 }
 
 ACL = _Base:new {
-  perms = ""
-  id = nil     -- Id object
+  perms = "",
+  id = nil,     -- Id object
 
   dump_raw = function(self, stream)
     struct.pack_raw('>S', stream, self.perms)
     self.id:dump_raw(stream)
     return stream
-  end
+  end,
 
   load = function(self, stream, start_idx)
     local vars, start_idx, err = struct.unpack('>SS', stream, start_idx)
@@ -127,28 +127,28 @@ ACL = _Base:new {
       self.scheme, self.id = unpack(vars)
     end
     return start_idx, err
-  end
+  end,
 }
 
 Stat = _Base:new{
-  czxid = 0          --long:  created zxid
-  mzxid = 0          --long:  last modified zxid
-  ctime = 0          --long: created
-  mtime = 0          --long: last modified
-  version = 0        --int:  version
-  cversion = 0       --int:  child version
-  aversion = 0       --int:  acl version
-  ephemeralOwner = 0 --long: owner id if ephemeral, 0 otw
-  dataLength = 0     --int: length of the data in the node
-  numChildren = 0    --int: number of children of this node
-  pzxid = 0          --long: last modified children
+  czxid = 0,          --long:  created zxid
+  mzxid = 0,          --long:  last modified zxid
+  ctime = 0,          --long: created
+  mtime = 0,          --long: last modified
+  version = 0,        --int:  version
+  cversion = 0,       --int:  child version
+  aversion = 0,       --int:  acl version
+  ephemeralOwner = 0, --long: owner id if ephemeral, 0 otw
+  dataLength = 0,     --int: length of the data in the node
+  numChildren = 0,    --int: number of children of this node
+  pzxid = 0,          --long: last modified children
 
   dump_raw = function(self, stream)
     return struct.pack_raw('>lllliiiliil', stream, self.czxid, self.mzxid,
                            self.ctime, self.mtime, self.version, self.cversion,
                            self.aversion, self.ephemeralOwner, self.dataLength,
                            self.numChildren, self.pzxid)
-  end
+  end,
 
   load = function(self, stream, start_idx)
     local vars, start_idx, err = struct.unpack('>lllliiiliil', stream, start_idx)
@@ -156,23 +156,23 @@ Stat = _Base:new{
       self.czxid, self.mzxid, self.ctime, self.mtime, self.version, self.cversion, self.aversion, self.ephemeralOwner, self.dataLength, self.numChildren, self.pzxid = unpack(vars)
     end
     return start_idx, err
-  end
+  end,
 }
 
 PingReq = _Base:new{type = consts.ZOO_PING_OP}
 CloseReq = _Base:new{type = consts.ZOO_CLOSE_OP}
 
 ConnectReq = _Base:new {
-  proto_ver = 0        -- int
-  last_zxid_seen = 0   -- long
-  timeout = 0          -- int
-  session_id = 0       -- long
-  passwd = ""          -- buffer
+  proto_ver = 0,        -- int
+  last_zxid_seen = 0,   -- long
+  timeout = 0,          -- int
+  session_id = 0,       -- long
+  passwd = "",          -- buffer
 
   dump_raw = function(self, stream)
     return struct.pack_raw(">ililS", stream, self.proto_ver, self.last_zxid_seen,
                        self.timeout, self.session_id, self.passwd)
-  end
+  end,
 
   load = function(self, stream, start_idx)
     start_idx = start_idx or 0
@@ -180,16 +180,16 @@ ConnectReq = _Base:new {
     if err == nil then
       self.proto_ver, self.last_zxid_seen, self.timeout, self.session_id, self.passwd = unpack(vars)
     end
-  end
+  end,
 }
 
 ReqHeader = _Base:new {
-  xid = 0    -- int
-  type = 0     -- int
+  xid = 0,    -- int
+  type = 0,     -- int
 
   dump_raw = function(self, stream)
     return struct.pack_raw('>ii', stream, self.xid, self.type)
-  end
+  end,
 
   load = function(self, stream, start_idx)
     local vars, start_idx, err = struct.unpack('>ii', stream, start_idx)
@@ -197,17 +197,17 @@ ReqHeader = _Base:new {
       self.xid, self.type = unpack(vars)
     end
     return start_idx, err
-  end
+  end,
 }
 
 MultiHeader = _Base:new {
-  type = 0     -- int
-  done = true    -- boolean
-  err = 0     -- int
+  type = 0,     -- int
+  done = true,    -- boolean
+  err = 0,     -- int
 
   dump_raw = function(self, stream)
     return struct.pack_raw('>i?i', stream, self.type, self.done, self.err)
-  end
+  end,
 
   load = function(self, stream, start_idx)
     local vars, start_idx, err = struct.unpack('>i?i', stream, start_idx)
@@ -215,17 +215,17 @@ MultiHeader = _Base:new {
       self.type, self.done, self.err = unpack(vars)
     end
     return start_idx, err
-  end
+  end,
 }
 
 AuthPacket = _Base:new {
-  type = consts.ZOO_SETAUTH_OP    -- int
-  scheme = ""
-  auth = ""   -- buffer
+  type = consts.ZOO_SETAUTH_OP,    -- int
+  scheme = "",
+  auth = "",   -- buffer
 
   dump_raw = function(self, stream)
     return struct.pack_raw(">iSS", stream, self.type, self.scheme, self.auth)
-  end
+  end,
 
   load = function(self, stream, start_idx)
     start_idx = start_idx or 0
@@ -234,17 +234,17 @@ AuthPacket = _Base:new {
       self.type, self.scheme, self.auth = unpack(vars)
     end
     return start_idx, err
-  end
+  end,
 }
 
 ReplyHeader = _Base:new {
-  xid = 0     -- int
-  zxid = 0    -- long
-  err = 0     -- int
+  xid = 0,     -- int
+  zxid = 0,    -- long
+  err = 0,     -- int
 
   dump_raw = function(self, stream)
     return struct.pack_raw('>ili', stream, self.xid, self.zxid, self.err)
-  end
+  end,
 
   load = function(self, stream, start_idx)
     local vars, start_idx, err = struct.unpack('>ili', stream, start_idx)
@@ -252,20 +252,20 @@ ReplyHeader = _Base:new {
       self.xid, self.zxid, self.err = unpack(vars)
     end
     return start_idx, err
-  end
+  end,
 }
 
 GetDataReq = _PathWatchPacket:new{type = consts.ZOO_GETDATA_OP}
 
 SetDataReq = _Base:new {
-  type = consts.ZOO_SETDATA_OP
-  path = ""
-  data = ""    -- buffer
-  version = 0  -- int
+  type = consts.ZOO_SETDATA_OP,
+  path = "",
+  data = "",    -- buffer
+  version = 0,  -- int
 
   dump_raw = function(self, stream)
     return struct.pack_raw(">SSi", stream, self.path, self.data, self.version)
-  end
+  end,
 
   load = function(self, stream, start_idx)
     start_idx = start_idx or 0
@@ -274,20 +274,20 @@ SetDataReq = _Base:new {
       self.path, self.data, self.version = unpack(vars)
     end
     return start_idx, err
-  end
+  end,
 }
 
 ReconfigReq = _Base:new {
-  type = consts.ZOO_RECONFIG_OP
-  joining = ""
-  leaving = ""
-  new_members = ""
-  config_id = 0  -- long
+  type = consts.ZOO_RECONFIG_OP,
+  joining = "",
+  leaving = "",
+  new_members = "",
+  config_id = 0,  -- long
 
   dump_raw = function(self, stream)
     return struct.pack_raw(">SSSl", stream, self.joining, self.leaving,
                            self.new_members, self.config_id)
-  end
+  end,
 
   load = function(self, stream, start_idx)
     start_idx = start_idx or 0
@@ -296,15 +296,15 @@ ReconfigReq = _Base:new {
       self.joining, self.leaving, self.new_members, self.config_id = unpack(vars)
     end
     return start_idx, err
-  end
+  end,
 }
 
 CreateReq = _Base:new {
-  type = consts.ZOO_CREATE_OP
-  path = ""
-  data = ""    -- buffer
-  acls = {}    -- list of ACL
-  flags = 0    -- int
+  type = consts.ZOO_CREATE_OP,
+  path = "",
+  data = "",    -- buffer
+  acls = {},    -- list of ACL
+  flags = 0,    -- int
 
   dump_raw = function(self, stream)
     struct.pack_raw(">SSi", stream, self.path, self.data, #self.acls)
@@ -313,7 +313,7 @@ CreateReq = _Base:new {
     end
     struct.pack_raw(">i", stream, self.flags)
     return stream
-  end
+  end,
 
   load = function(self, stream, start_idx)
     start_idx = start_idx or 0
@@ -340,7 +340,7 @@ CreateReq = _Base:new {
       self.flags = unpack(vars)
     end
     return start_idx, err
-  end
+  end,
 }
 
 DeleteReq = _PathVersionPacket:new{type = consts.ZOO_DELETE_OP}
@@ -358,10 +358,10 @@ GetACL = _PathPacket:new{type = consts.ZOO_GETACL_OP}
 
 -- TODO
 SetACL = _Base:new {
-  type = consts.ZOO_SETACL_OP
-  path = ""
-  acls = {}   -- list of ACL object
-  version = 0 -- int
+  type = consts.ZOO_SETACL_OP,
+  path = "",
+  acls = {},   -- list of ACL object
+  version = 0, -- int
 
   dump_raw = function(self, stream)
     struct.pack_raw(">Si", stream, self.path, #self.acls)
@@ -370,7 +370,7 @@ SetACL = _Base:new {
     end
     struct.pack_raw(">i", stream, self.version)
     return stream
-  end
+  end,
 
   load = function(self, stream, start_idx)
     start_idx = start_idx or 0
@@ -397,17 +397,17 @@ SetACL = _Base:new {
       self.version = unpack(vars)
     end
     return start_idx, err
-  end
+  end,
 }
 
 WatchEvent = _Base:new {
-  type = 0   --int
-  state = 0 --int
-  path = ""
+  type = 0,   --int
+  state = 0, --int
+  path = "",
 
   dump_raw = function(self, stream)
     return struct.pack_raw(">iiS", stream, self.type, self.state, self.path)
-  end
+  end,
 
   load = function(self, stream, start_idx)
     start_idx = start_idx or 0
@@ -416,7 +416,7 @@ WatchEvent = _Base:new {
       self.type, self.state, self.path = unpack(vars)
     end
     return start_idx, err
-  end
+  end,
 }
 
 ExistsReq = _PathWatchPacket:new{type = consts.ZOO_EXISTS_OP}
