@@ -1,4 +1,7 @@
-local bit = "require bit"
+local bit = require  "bit"
+local consts = require "constants"
+local proto = require "protocol"
+
 local setmetatable = setmetatable
 
 local _M = {_VERSION="0.01"}
@@ -9,10 +12,6 @@ elseif _ENV then                -- for lua5.2 or newer
    _ENV = _M
 else
    error("both setfenv and _ENV are nil...")
-end
-
--- private function
-local function _hello()
 end
 
 -- public function

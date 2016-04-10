@@ -1,9 +1,10 @@
 local bit = require "bit"
 local struct = require "struct"
+local consts = require "constants"
 
 local setmetatable = setmetatable
 
-local _M = {_VERSION="0.01"}
+local _M = {}
 
 if setfenv then                 -- for lua5.1 and luajit
   setfenv(1, _M)
@@ -13,31 +14,7 @@ else
   error("both setfenv and _ENV are nil...")
 end
 
--- packet type
-local ZOO_NOTIFY_OP       = 0
-local ZOO_CREATE_OP       = 1
-local ZOO_DELETE_OP       = 2
-local ZOO_EXISTS_OP       = 3
-local ZOO_GETDATA_OP      = 4
-local ZOO_SETDATA_OP      = 5
-local ZOO_GETACL_OP       = 6
-local ZOO_SETACL_OP       = 7
-local ZOO_GETCHILDREN_OP  = 8
-local ZOO_SYNC_OP         = 9
-local ZOO_PING_OP         = 11
-local ZOO_GETCHILDREN2_OP = 12
-local ZOO_CHECK_OP        = 13
-local ZOO_MULTI_OP        = 14
-local ZOO_CREATE2_OP      = 15
-local ZOO_RECONFIG_OP     = 16
-local ZOO_REMOVE_WATCHES  = 17
-local ZOO_CLOSE_OP        = -11
-local ZOO_SETAUTH_OP      = 100
-local ZOO_SETWATCHES_OP   = 101
-
-local _TypePacket = {
-  type = 0
-
+local _Base = {
   new = function(self, o)
     o = o or {}
     -- create object if user does not provide one
@@ -47,33 +24,25 @@ local _TypePacket = {
   end
 
   dump = function(self)
-    return ''
+    local stream = {}
+    self:dump_raw(stream)
+    return table.concat(stream)
   end
 
+  -- just a place holder
   dump_raw = function(self, stream)
     return stream
   end
 
+  -- just a place holder
   load = function(self, stream, start_idx)
     return start_idx, nil
   end
 }
 
-local _PathWatchPacket = {
+local _PathWatchPacket = _Base:new {
   path = ""
   watch = false  -- boolean
-
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    return struct.pack(">S?", self.path, self.watch)
-  end
 
   dump_raw = function(self, stream)
     return struct.pack_raw('>S?', stream, self.path, self.watch)
@@ -89,21 +58,9 @@ local _PathWatchPacket = {
   end
 }
 
-local _PathVersionPacket = {
+local _PathVersionPacket = _Base:new {
   path = ""
   version = 0  -- int
-
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    return struct.pack(">Si", self.path, self.version)
-  end
 
   dump_raw = function(self, stream)
     return struct.pack_raw('>Si', stream, self.path, self.version)
@@ -119,20 +76,8 @@ local _PathVersionPacket = {
   end
 }
 
-local _PathPacket = {
+local _PathPacket = _Base:new {
   path = ""
-
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    return struct.pack(">S", self.path)
-  end
 
   dump_raw = function(self, stream)
     return struct.pack_raw('>S', stream, self.path)
@@ -148,25 +93,10 @@ local _PathPacket = {
   end
 }
 
--- private function
--- local function _hello()
--- end
 
-
-Id = {
+Id = _Base:new {
   scheme = ""
   id = ""
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    return struct.pack('>SS', self.scheme, self.id)
-  end
 
   dump_raw = function(self, stream)
     return struct.pack_raw('>SS', stream, self.scheme, self.id)
@@ -181,22 +111,9 @@ Id = {
   end
 }
 
-ACL = {
+ACL = _Base:new {
   perms = ""
   id = nil     -- Id object
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    local stream = {}
-    self:dump_raw(stream)
-    return table.concat(stream)
-  end
 
   dump_raw = function(self, stream)
     struct.pack_raw('>S', stream, self.perms)
@@ -213,7 +130,7 @@ ACL = {
   end
 }
 
-Stat = {
+Stat = _Base:new{
   czxid = 0          --long:  created zxid
   mzxid = 0          --long:  last modified zxid
   ctime = 0          --long: created
@@ -225,21 +142,6 @@ Stat = {
   dataLength = 0     --int: length of the data in the node
   numChildren = 0    --int: number of children of this node
   pzxid = 0          --long: last modified children
-
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    return struct.pack('>lllliiiliil', self.czxid, self.mzxid, self.ctime,
-                       self.mtime, self.version, self.cversion, self.aversion,
-                       self.ephemeralOwner, self.dataLength, self.numChildren,
-                       self.pzxid)
-  end
 
   dump_raw = function(self, stream)
     return struct.pack_raw('>lllliiiliil', stream, self.czxid, self.mzxid,
@@ -257,27 +159,15 @@ Stat = {
   end
 }
 
-PingReq = _TypePacket:new{type = ZOO_PING_OP}
-CloseReq = _TypePacket:new{type = ZOO_CLOSE_OP}
+PingReq = _Base:new{type = consts.ZOO_PING_OP}
+CloseReq = _Base:new{type = consts.ZOO_CLOSE_OP}
 
-ConnectReq = {
+ConnectReq = _Base:new {
   proto_ver = 0        -- int
   last_zxid_seen = 0   -- long
   timeout = 0          -- int
   session_id = 0       -- long
   passwd = ""          -- buffer
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    return struct.pack(">ililS", self.proto_ver, self.last_zxid_seen,
-                       self.timeout, self.session_id, self.passwd)
-  end
 
   dump_raw = function(self, stream)
     return struct.pack_raw(">ililS", stream, self.proto_ver, self.last_zxid_seen,
@@ -293,20 +183,9 @@ ConnectReq = {
   end
 }
 
-ReqHeader = {
+ReqHeader = _Base:new {
   xid = 0    -- int
   type = 0     -- int
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    return struct.pack('>ii', self.xid, self.type)
-  end
 
   dump_raw = function(self, stream)
     return struct.pack_raw('>ii', stream, self.xid, self.type)
@@ -321,21 +200,10 @@ ReqHeader = {
   end
 }
 
-MultiHeader = {
+MultiHeader = _Base:new {
   type = 0     -- int
   done = true    -- boolean
   err = 0     -- int
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    return struct.pack('>i?i', self.type, self.done, self.err)
-  end
 
   dump_raw = function(self, stream)
     return struct.pack_raw('>i?i', stream, self.type, self.done, self.err)
@@ -350,22 +218,10 @@ MultiHeader = {
   end
 }
 
-AuthPacket = {
-  type = ZOO_SETAUTH_OP    -- int
+AuthPacket = _Base:new {
+  type = consts.ZOO_SETAUTH_OP    -- int
   scheme = ""
   auth = ""   -- buffer
-
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    return struct.pack(">iSS", self.type, self.scheme, self.auth)
-  end
 
   dump_raw = function(self, stream)
     return struct.pack_raw(">iSS", stream, self.type, self.scheme, self.auth)
@@ -381,21 +237,10 @@ AuthPacket = {
   end
 }
 
-ReplyHeader = {
+ReplyHeader = _Base:new {
   xid = 0     -- int
   zxid = 0    -- long
   err = 0     -- int
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    return struct.pack('>ili', self.xid, self.zxid, self.err)
-  end
 
   dump_raw = function(self, stream)
     return struct.pack_raw('>ili', stream, self.xid, self.zxid, self.err)
@@ -410,25 +255,13 @@ ReplyHeader = {
   end
 }
 
-GetDataReq = _PathWatchPacket:new{type = ZOO_GETDATA_OP}
+GetDataReq = _PathWatchPacket:new{type = consts.ZOO_GETDATA_OP}
 
-SetDataReq = {
-  type = ZOO_SETDATA_OP
+SetDataReq = _Base:new {
+  type = consts.ZOO_SETDATA_OP
   path = ""
   data = ""    -- buffer
   version = 0  -- int
-
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    return struct.pack(">SSi", self.path, self.data, self.version)
-  end
 
   dump_raw = function(self, stream)
     return struct.pack_raw(">SSi", stream, self.path, self.data, self.version)
@@ -444,25 +277,12 @@ SetDataReq = {
   end
 }
 
-ReconfigReq = {
-  type = ZOO_RECONFIG_OP
+ReconfigReq = _Base:new {
+  type = consts.ZOO_RECONFIG_OP
   joining = ""
   leaving = ""
   new_members = ""
   config_id = 0  -- long
-
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    return struct.pack(">SSSl", self.joining, self.leaving,
-                       self.new_members, self.config_id)
-  end
 
   dump_raw = function(self, stream)
     return struct.pack_raw(">SSSl", stream, self.joining, self.leaving,
@@ -479,26 +299,12 @@ ReconfigReq = {
   end
 }
 
-CreateReq = {
-  type = ZOO_CREATE_OP
+CreateReq = _Base:new {
+  type = consts.ZOO_CREATE_OP
   path = ""
   data = ""    -- buffer
   acls = {}    -- list of ACL
   flags = 0    -- int
-
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    local stream = {}
-    self:dump_raw(stream)
-    return table.concat(stream)
-  end
 
   dump_raw = function(self, stream)
     struct.pack_raw(">SSi", stream, self.path, self.data, #self.acls)
@@ -537,39 +343,25 @@ CreateReq = {
   end
 }
 
-DeleteReq = _PathVersionPacket:new{type = ZOO_DELETE_OP}
+DeleteReq = _PathVersionPacket:new{type = consts.ZOO_DELETE_OP}
 
-GetChildrenReq = _PathWatchPacket:new{type = ZOO_GETCHILDREN_OP}
-GetChildren2Req = _PathWatchPacket:new{type = ZOO_GETCHILDREN2_OP}
+GetChildrenReq = _PathWatchPacket:new{type = consts.ZOO_GETCHILDREN_OP}
+GetChildren2Req = _PathWatchPacket:new{type = consts.ZOO_GETCHILDREN2_OP}
 
-CheckVersionReq = _PathVersionPacket:new{type = ZOO_CHECK_OP}
+CheckVersionReq = _PathVersionPacket:new{type = consts.ZOO_CHECK_OP}
 GetMaxChildrenReq = _PathPacket
 
-SyncReq = _PathPacket:new{type = ZOO_SYNC_OP}
+SyncReq = _PathPacket:new{type = consts.ZOO_SYNC_OP}
 SyncResp = _PathPacket
 
-GetACL = _PathPacket:new{type = ZOO_GETACL_OP}
+GetACL = _PathPacket:new{type = consts.ZOO_GETACL_OP}
 
 -- TODO
-SetACL = {
-  type = ZOO_SETACL_OP
+SetACL = _Base:new {
+  type = consts.ZOO_SETACL_OP
   path = ""
   acls = {}   -- list of ACL object
   version = 0 -- int
-
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    local stream = {}
-    self:dump_raw(stream)
-    return table.concat(stream)
-  end
 
   dump_raw = function(self, stream)
     struct.pack_raw(">Si", stream, self.path, #self.acls)
@@ -608,22 +400,10 @@ SetACL = {
   end
 }
 
-WatchEvent = {
+WatchEvent = _Base:new {
   type = 0   --int
   state = 0 --int
   path = ""
-
-  new = function(self, o)
-    o = o or {}
-    -- create object if user does not provide one
-    setmetatable(o, self)
-    self.__index = self
-    return o
-  end
-
-  dump = function(self)
-    return struct.pack(">iiS", self.type, self.state, self.path)
-  end
 
   dump_raw = function(self, stream)
     return struct.pack_raw(">iiS", stream, self.type, self.state, self.path)
@@ -639,9 +419,14 @@ WatchEvent = {
   end
 }
 
-ExistsReq = _PathWatchPacket:new{type = ZOO_EXISTS_OP}
+ExistsReq = _PathWatchPacket:new{type = consts.ZOO_EXISTS_OP}
 
 function serialize(o, zxid)
+  if o.type == consts.ZOO_PING_OP then
+    zxid = consts.PING_XID
+  elseif o.type == consts.ZOO_AUTH_OP then
+    zxid = consts.AUTH_XID
+  end
   local stream = {}
   if zxid then
     struct.pack_raw('>i', stream, zxid)
