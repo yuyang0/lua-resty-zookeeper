@@ -55,7 +55,7 @@ local function pack_int(val, numbytes, endianness)
   end
 end
 
-local function unpack_int(stream, start_idx, numbytes, endianness)
+local function unpack_int(stream, start_idx, numbytes, endianness, signed)
   local val = 0
   for j = 1, numbytes do
     local byte = string.byte(stream:sub(start_idx, start_idx))
@@ -73,8 +73,8 @@ local function unpack_int(stream, start_idx, numbytes, endianness)
 end
 
 -- return a table.
-function _M.pack_raw(format, stream, ...)
-  -- local stream = {}
+function _M.pack_raw(format, ret_tbl, ...)
+  -- local ret_tbl = {}
   local vars = {...}
   local endianness = true
 
@@ -89,7 +89,7 @@ function _M.pack_raw(format, stream, ...)
       if val == true then
         byte = string.char(1)
       end
-      table.insert(stream, byte)
+      table.insert(ret_tbl, byte)
     elseif opt:find('[bBhHiIlL]') then
       local n = opt:find('[hH]') and 2 or opt:find('[iI]') and 4 or opt:find('[lL]') and 8 or 1
       local val = tonumber(table.remove(vars, 1))
@@ -101,9 +101,9 @@ function _M.pack_raw(format, stream, ...)
       end
 
       if not endianness then
-        table.insert(stream, string.reverse(table.concat(bytes)))
+        table.insert(ret_tbl, string.reverse(table.concat(bytes)))
       else
-        table.insert(stream, table.concat(bytes))
+        table.insert(ret_tbl, table.concat(bytes))
       end
     elseif opt:find('[fd]') then
       local val = tonumber(table.remove(vars, 1))
@@ -143,21 +143,21 @@ function _M.pack_raw(format, stream, ...)
       val = math.floor((sign * 128 + val) / (2 ^ 8))
 
       if not endianness then
-        table.insert(stream, string.reverse(table.concat(bytes)))
+        table.insert(ret_tbl, string.reverse(table.concat(bytes)))
       else
-        table.insert(stream, table.concat(bytes))
+        table.insert(ret_tbl, table.concat(bytes))
       end
     elseif opt == 's' then
-      table.insert(stream, tostring(table.remove(vars, 1)))
-      table.insert(stream, string.char(0))
+      table.insert(ret_tbl, tostring(table.remove(vars, 1)))
+      table.insert(ret_tbl, string.char(0))
     elseif opt == 'S' then
       -- same as `s` except:
       -- 1. it will packed length first.
       -- 2. don't append a zero byte to the end.
       local s_arg = tostring(table.remove(vars, 1))
       local len_bytes = pack_int(s_arg:len(), 4, endianness)
-      table.insert(stream, len_bytes)
-      table.insert(stream, s_arg)
+      table.insert(ret_tbl, len_bytes)
+      table.insert(ret_tbl, s_arg)
     elseif opt == 'c' then
       local n = format:sub(i + 1):match('%d+')
       local length = tonumber(n)
@@ -167,19 +167,19 @@ function _M.pack_raw(format, stream, ...)
         if length - str:len() > 0 then
           str = str .. string.rep(' ', length - str:len())
         end
-        table.insert(stream, str:sub(1, length))
+        table.insert(ret_tbl, str:sub(1, length))
       end
       i = i + n:len()
     end
   end
-  return stream
+  return ret_tbl
 end
 
 function _M.pack(formt, ...)
-  local stream = {}
+  local tbl = {}
   local vars = {...}
-  _M.pack_raw(formt, stream, gunpack(vars))
-  return table.concat(stream)
+  _M.pack_raw(formt, tbl, gunpack(vars))
+  return table.concat(tbl)
 end
 
 function _M.unpack(format, stream, start_idx)
@@ -282,8 +282,8 @@ function _M.unpack(format, stream, start_idx)
   return vars, start_idx, nil
 end
 
-
 function _M.unpack_to_end(format, stream, start_idx)
+  start_idx = start_idx or 1
   local vars, _, err = _M.unpack(format, stream, start_idx)
   return vars, err
 end

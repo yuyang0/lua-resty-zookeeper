@@ -183,6 +183,26 @@ ConnectReq = _Base:new {
   end,
 }
 
+ConnectResp = _Base:new {
+  proto_ver = 0,        -- int
+  timeout = 0,          -- int
+  session_id = 0,       -- long
+  passwd = "",          -- buffer
+
+  dump_raw = function(self, stream)
+    return struct.pack_raw(">iilS", stream, self.proto_ver,
+                           self.timeout, self.session_id, self.passwd)
+  end,
+
+  load = function(self, stream, start_idx)
+    start_idx = start_idx or 0
+    local vars, start_idx, err = struct.unpack('>iilS', stream, start_idx)
+    if err == nil then
+      self.proto_ver, self.timeout, self.session_id, self.passwd = unpack(vars)
+    end
+  end,
+}
+
 ReqHeader = _Base:new {
   xid = 0,    -- int
   type = 0,     -- int
